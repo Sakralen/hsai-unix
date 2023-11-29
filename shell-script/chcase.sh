@@ -24,10 +24,14 @@ to_case=$1
 dir=$2
 
 case "$1" in
-    "-l"|"--lower")
+    "-l")
+        ;;
+    "--lower")
         to_case="-l"
         ;;
-    "-u"|"--upper")
+    "-u")
+        ;;
+    "--upper")
         to_case="-u"
         ;;
     *)
