@@ -10,13 +10,12 @@
 
 #define STR_BUFF_SIZE 128
 
-#define DAEMON_NAME "fmodlogger"
 #define WORKING_DIR "/tmp/"
 
-const char *cfg_path;
+char cfg_path[STR_BUFF_SIZE];
 
 time_t check_period;
-const char *target_path;
+char target_path[STR_BUFF_SIZE];
 
 void read_cfg()
 {
@@ -67,7 +66,7 @@ void signal_handler(int signal)
     case SIGHUP:
         syslog(LOG_INFO, "SIGHUP accepted");
         read_cfg();
-        syslog(LOG_INFO, "Target dir changed");
+        syslog(LOG_INFO, "Config changed");
         break;
 
     case SIGTERM:
@@ -121,17 +120,17 @@ void launch_daemon()
 
 void execute(const char *path)
 {
-    struct stat *file_stat;
-    if (stat(path, file_stat) < 0)
+    struct stat file_stat;
+    if (stat(path, &file_stat) < 0)
     {
         syslog(LOG_ERR, "Failed to get stat of %s", path);
         return;
     }
 
-    if (S_ISREG(file_stat->st_mode))
+    if (S_ISREG(file_stat.st_mode))
     {
         time_t prev_check_time = time(NULL) - check_period;
-        time_t mod_time = file_stat->st_mtime;
+        time_t mod_time = file_stat.st_mtime;
 
         if (mod_time > prev_check_time)
         {
@@ -144,7 +143,7 @@ void execute(const char *path)
         return;
     }
 
-    if (S_ISDIR(file_stat->st_mode))
+    if (S_ISDIR(file_stat.st_mode))
     {
         DIR *dir = opendir(path);
         if (!dir)
@@ -154,7 +153,7 @@ void execute(const char *path)
         }
 
         struct dirent *entry = readdir(dir);
-        while (!entry)
+        while (entry)
         {
             if (entry->d_name[0] == '.')
             {
@@ -162,11 +161,8 @@ void execute(const char *path)
                 continue;
             }
 
-            char new_path_buff[STR_BUFF_SIZE];
-            snprintf(new_path_buff, sizeof(new_path_buff), "%s/%s", path, new_path_buff);
-
-            const char *new_path;
-            strcpy(new_path, new_path_buff);
+            char new_path[STR_BUFF_SIZE];
+            snprintf(new_path, sizeof(new_path), "%s/%s", path, entry->d_name);
 
             execute(new_path);
 
@@ -186,13 +182,13 @@ int main(int argc, char *argv[])
         return EXIT_SUCCESS;
     }
 
-    openlog(DAEMON_NAME, LOG_PID, LOG_USER);
+    openlog(argv[0], LOG_PID, LOG_USER);
 
     strcpy(cfg_path, argv[1]);
     read_cfg();
     launch_daemon();
 
-    syslog(LOG_INFO, "%s launched in %s with %lu check period", DAEMON_NAME, target_path, check_period);
+    syslog(LOG_INFO, "%s launched in %s with %lu check period", argv[0], target_path, check_period);
 
     while (1)
     {
