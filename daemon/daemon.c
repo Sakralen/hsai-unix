@@ -6,21 +6,22 @@
 #include <string.h>
 #include <dirent.h>
 #include <sys/stat.h>
+#include <time.h>
 
-#define STR_BUF_SIZE 64
+#define STR_BUFF_SIZE 128
 
-#define DAEMON_NAME "dirlogger"
+#define DAEMON_NAME "fmodlogger"
 #define WORKING_DIR "/tmp/"
 
 const char *cfg_path;
 
-unsigned long check_period;
-const char *target_dir;
+time_t check_period;
+const char *target_path;
 
 void read_cfg()
 {
-    char substr1[STR_BUF_SIZE];
-    char substr2[STR_BUF_SIZE];
+    char substr1[STR_BUFF_SIZE];
+    char substr2[STR_BUFF_SIZE];
     FILE *file = fopen(cfg_path, "r");
 
     if (!file)
@@ -53,7 +54,7 @@ void read_cfg()
         exit(EXIT_FAILURE);
     }
 
-    strcpy(target_dir, substr1);
+    strcpy(target_path, substr1);
     check_period = period;
 
     fclose(file);
@@ -118,9 +119,63 @@ void launch_daemon()
     signal(SIGTERM, signal_handler);
 }
 
-void execute()
+void execute(const char *path)
 {
-    // TODO: Implement!
+    struct stat *file_stat;
+    if (stat(path, file_stat) < 0)
+    {
+        syslog(LOG_ERR, "Failed to get stat of %s", path);
+        return;
+    }
+
+    if (S_ISREG(file_stat->st_mode))
+    {
+        time_t prev_check_time = time(NULL) - check_period;
+        time_t mod_time = file_stat->st_mtime;
+
+        if (mod_time > prev_check_time)
+        {
+            char time_str[STR_BUFF_SIZE];
+            strftime(time_str, sizeof(time_str), "%Y-%m-%d %H:%M:%S", localtime(&mod_time));
+
+            syslog(LOG_INFO, "%s modified at %s", path, time_str);
+        }
+
+        return;
+    }
+
+    if (S_ISDIR(file_stat->st_mode))
+    {
+        DIR *dir = opendir(path);
+        if (!dir)
+        {
+            syslog(LOG_ERR, "Failed to open dir %s", path);
+            return;
+        }
+
+        struct dirent *entry = readdir(dir);
+        while (!entry)
+        {
+            if (entry->d_name[0] == '.')
+            {
+                entry = readdir(dir);
+                continue;
+            }
+
+            char new_path_buff[STR_BUFF_SIZE];
+            snprintf(new_path_buff, sizeof(new_path_buff), "%s/%s", path, new_path_buff);
+
+            const char *new_path;
+            strcpy(new_path, new_path_buff);
+
+            execute(new_path);
+
+            entry = readdir(dir);
+        }
+
+        closedir(dir);
+        return;
+    }
 }
 
 int main(int argc, char *argv[])
@@ -128,7 +183,7 @@ int main(int argc, char *argv[])
     if (argc != 2)
     {
         printf("Usage: %s <path to config>\n", argv[0]);
-        return EXIT_FAILURE;
+        return EXIT_SUCCESS;
     }
 
     openlog(DAEMON_NAME, LOG_PID, LOG_USER);
@@ -137,11 +192,11 @@ int main(int argc, char *argv[])
     read_cfg();
     launch_daemon();
 
-    syslog(LOG_INFO, "%s launched in %s with %lu check period", DAEMON_NAME, target_dir, check_period);
+    syslog(LOG_INFO, "%s launched in %s with %lu check period", DAEMON_NAME, target_path, check_period);
 
     while (1)
     {
         sleep(check_period);
-        execute();
+        execute(target_path);
     }
 }
