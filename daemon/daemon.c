@@ -8,6 +8,9 @@
 #include <sys/stat.h>
 #include <time.h>
 
+#define TRUE (1 == 1)
+#define FALSE !TRUE
+
 #define STR_BUFF_SIZE 128
 
 #define WORKING_DIR "/tmp/"
@@ -16,6 +19,8 @@ char cfg_path[STR_BUFF_SIZE];
 
 time_t check_period;
 char target_path[STR_BUFF_SIZE];
+
+int is_dir_set;
 
 void read_cfg()
 {
@@ -36,15 +41,6 @@ void read_cfg()
         exit(EXIT_FAILURE);
     }
 
-    DIR *dir = opendir(substr1);
-    if (!dir)
-    {
-        syslog(LOG_ERR, "Error opening target directory");
-        fclose(file);
-        exit(EXIT_FAILURE);
-    }
-    closedir(dir);
-
     unsigned long period = strtoul(substr2, NULL, 10);
     if (period <= 0)
     {
@@ -53,8 +49,22 @@ void read_cfg()
         exit(EXIT_FAILURE);
     }
 
-    strcpy(target_path, substr1);
     check_period = period;
+
+    DIR *dir = opendir(substr1);
+    if (!dir)
+    {
+        is_dir_set = FALSE;
+        syslog(LOG_ERR, "Error opening target directory");
+        // fclose(file);
+        // exit(EXIT_FAILURE);
+    }
+    else
+    {
+        is_dir_set = TRUE;
+        closedir(dir);
+        strcpy(target_path, substr1);
+    }
 
     fclose(file);
 }
@@ -193,6 +203,14 @@ int main(int argc, char *argv[])
     while (1)
     {
         sleep(check_period);
-        execute(target_path);
+
+        if (is_dir_set)
+        {
+            execute(target_path);
+        }
+        else
+        {
+            syslog(LOG_ERR, "Uncorrect directory. Set other directory.");
+        }
     }
 }
