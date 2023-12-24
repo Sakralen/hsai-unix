@@ -19,6 +19,9 @@
 #define PORT 6969
 #define BACKLOG_SIZE 10
 
+#define HTML_TYPE 0
+#define JPEG_TYPE 1
+
 char pages_dir_path[STR_BUFF_SIZE]; // TODO
 char home_page_path[STR_BUFF_SIZE];
 
@@ -145,6 +148,49 @@ void init_listener_socket()
     syslog(LOG_INFO, "Web-server started successfully");
 }
 
+void send_file(int client_socket, const char *file_path, int type)
+{
+    char buffer[STR_BUFF_SIZE];
+    FILE *file = fopen(file_path, "r");
+    if (!file)
+    {
+        syslog(LOG_ERR, "Error finding page %s", file_path);
+
+        const char *header = "HTTP/1.1 404 Not Found\nContent-Type: text/html\n\n";
+        send(client_socket, header, strlen(header), 0);
+
+        const char *not_found_response =
+            "<html><body>\
+            <h1>404 Not Found</h1>\
+            <p>The requested page could not be found.</p>\
+            </body></html>";
+        send(client_socket, not_found_response, strlen(not_found_response), 0);
+
+        return;
+    }
+
+    const char *header = NULL;
+    switch (type)
+    {
+    case HTML_TYPE:
+        header = "HTTP/1.1 200 OK\nContent-Type: text/html\n\n";
+        break;
+    case JPEG_TYPE:
+        header = "HTTP/1.1 200 OK\nContent-Type: image/jpeg\n\n";
+        break;
+    default:
+        break;
+    }
+    send(client_socket, header, strlen(header), 0);
+
+    size_t bytes_read;
+    while ((bytes_read = fread(buffer, 1, sizeof(buffer), file)) > 0)
+    {
+        send(client_socket, buffer, bytes_read, 0);
+    }
+    fclose(file);
+}
+
 void handle_client(int client_socket)
 {
     char buffer[STR_BUFF_SIZE];
@@ -188,36 +234,24 @@ void handle_client(int client_socket)
         return;
     }
 
+    if (strcmp(url, "/") == 0)
+    {
+        send_file(client_socket, home_page_path, HTML_TYPE);
+        return;
+    }
+
     char file_path[STR_BUFF_SIZE];
     snprintf(file_path, sizeof(file_path), "%s%s", pages_dir_path, url);
 
-    FILE *file = fopen(file_path, "r");
-    if (!file)
+    int type = HTML_TYPE;
+
+    char *dot = strrchr(url, '.');
+    if (dot && !strcmp(dot, ".jpeg")) 
     {
-        syslog(LOG_ERR, "Error finding page %s", file_path);
-
-        const char *header = "HTTP/1.1 404 Not Found\nContent-Type: text/html\n\n";
-        send(client_socket, header, strlen(header), 0);
-
-        const char *not_found_response =
-            "<html><body>\
-            <h1>404 Not Found</h1>\
-            <p>The requested page could not be found.</p>\
-            </body></html>";
-        send(client_socket, not_found_response, strlen(not_found_response), 0);
+        type = JPEG_TYPE;
     }
-    else
-    {
-        const char *header = "HTTP/1.1 200 OK\nContent-Type: text/html\n\n";
-        send(client_socket, header, strlen(header), 0);
 
-        size_t bytes_read;
-        while ((bytes_read = fread(buffer, 1, sizeof(buffer), file)) > 0)
-        {
-            send(client_socket, buffer, bytes_read, 0);
-        }
-        fclose(file);
-    }
+    send_file(client_socket, file_path, type);
 
     // close(client_socket);
 }
