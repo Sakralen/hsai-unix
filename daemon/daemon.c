@@ -34,7 +34,7 @@ void read_cfg()
         exit(EXIT_FAILURE);
     }
 
-    if (fscanf(file, "%s %s", substr1, substr2) != 2)
+    if (fscanf(file, "%s\n%s", substr1, substr2) != 2)
     {
         syslog(LOG_ERR, "Incorrect config content");
         fclose(file);
