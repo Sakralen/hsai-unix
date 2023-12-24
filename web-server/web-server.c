@@ -253,7 +253,7 @@ void handle_client(int client_socket)
 
     send_file(client_socket, file_path, type);
 
-    // close(client_socket);
+    close(client_socket);
 }
 
 void listen_for_client()
