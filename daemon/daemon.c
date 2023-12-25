@@ -7,6 +7,7 @@
 #include <dirent.h>
 #include <sys/stat.h>
 #include <time.h>
+#include <errno.h>
 
 #define TRUE (1 == 1)
 #define FALSE !TRUE
@@ -34,17 +35,23 @@ void read_cfg()
         exit(EXIT_FAILURE);
     }
 
-    if (fscanf(file, "%s\n%s", substr1, substr2) != 2)
-    {
-        syslog(LOG_ERR, "Incorrect config content");
-        fclose(file);
-        exit(EXIT_FAILURE);
-    }
+    // if (fscanf(file, "%s\n%s", substr1, substr2) != 2)
+    // {
+    //     syslog(LOG_ERR, "Incorrect config content");
+    //     fclose(file);
+    //     exit(EXIT_FAILURE);
+    // }
+
+    fgets(substr1, sizeof(substr1), file);
+    fgets(substr2, sizeof(substr2), file);
+
+    substr1[strcspn(substr1, "\n")] = 0;
+    substr2[strcspn(substr2, "\n")] = 0;
 
     unsigned long period = strtoul(substr2, NULL, 10);
     if (period <= 0)
     {
-        syslog(LOG_ERR, "Incorrect check period");
+        syslog(LOG_ERR, "Incorrect check period: %s", substr2);
         fclose(file);
         exit(EXIT_FAILURE);
     }
@@ -55,7 +62,7 @@ void read_cfg()
     if (!dir)
     {
         is_dir_set = FALSE;
-        syslog(LOG_ERR, "Error opening target directory");
+        syslog(LOG_ERR, "Error opening target directory: %s; errno: %d", substr1, errno);
         // fclose(file);
         // exit(EXIT_FAILURE);
     }
